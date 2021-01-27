@@ -33,6 +33,16 @@ options:
     description:
       - When I(query=mappings), this is the Amazon Resource Name (ARN) of the Amazon Kinesis or DynamoDB stream.
     type: str
+  max_items:
+    description:
+      - Maximum number of items to return for various get/list requests.
+    type: int
+  next_marker:
+    description:
+      - "Some requests might return a maximum number of entries - EG 100 or the number specified by max_items.
+      If the number of entries exceeds this maximum another request can be sent using the NextMarker entry
+      from the first response to get the next page of results."
+    type: str
 author: Pierre Jodouin (@pjodouin)
 requirements:
     - boto3
