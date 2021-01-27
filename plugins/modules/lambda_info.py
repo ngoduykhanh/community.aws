@@ -21,7 +21,7 @@ options:
   query:
     description:
       - Specifies the resource type for which to gather information.  Leave blank to retrieve all information.
-    choices: [ "aliases", "all", "config", "mappings", "policy", "versions" ]
+    choices: [ "aliases", "all", "config", "mappings", "policy", "versions", "tags" ]
     default: "all"
     type: str
   function_name:
@@ -169,6 +169,7 @@ def all_details(client, module):
         lambda_info[function_name].update(policy_details(client, module)[function_name])
         lambda_info[function_name].update(version_details(client, module)[function_name])
         lambda_info[function_name].update(mapping_details(client, module)[function_name])
+        lambda_info[function_name].update(tags_details(client, module)[function_name])
     else:
         lambda_info.update(config_details(client, module))
 
@@ -213,6 +214,7 @@ def config_details(client, module):
 
         functions = dict()
         for func in lambda_info.pop('function_list', []):
+            func['tags'] = client.get_function(FunctionName=func['FunctionName']).get('Tags', {})
             functions[func['FunctionName']] = camel_dict_to_snake_dict(func)
         return functions
 
@@ -321,6 +323,32 @@ def version_details(client, module):
     return {function_name: camel_dict_to_snake_dict(lambda_info)}
 
 
+def tags_details(client, module):
+    """
+    Returns tag details for one or all lambda functions.
+
+    :param client: AWS API client reference (boto3)
+    :param module: Ansible module reference
+    :return dict:
+    """
+
+    lambda_info = dict()
+
+    function_name = module.params.get('function_name')
+    if function_name:
+        try:
+            lambda_info.update(tags=client.get_function(FunctionName=function_name).get('Tags', {}))
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                lambda_info.update(function={})
+            else:
+                module.fail_json_aws(e, msg="Trying to get {0} tags".format(function_name))
+    else:
+        module.fail_json(msg='Parameter function_name required for query=tags.')
+
+    return {function_name: camel_dict_to_snake_dict(lambda_info)}
+
+
 def main():
     """
     Main entry point.
@@ -329,7 +357,9 @@ def main():
     """
     argument_spec = dict(
         function_name=dict(required=False, default=None, aliases=['function', 'name']),
-        query=dict(required=False, choices=['aliases', 'all', 'config', 'mappings', 'policy', 'versions'], default='all'),
+        query=dict(required=False, choices=['aliases', 'all', 'config', 'mappings', 'policy', 'versions', 'tags'], default='all'),
+        max_items=dict(required=False, type='int'),
+        next_marker=dict(required=False),
         event_source_arn=dict(required=False, default=None)
     )
 
@@ -359,6 +389,7 @@ def main():
         mappings='mapping_details',
         policy='policy_details',
         versions='version_details',
+        tags='tags_details',
     )
 
     this_module_function = globals()[invocations[module.params['query']]]
